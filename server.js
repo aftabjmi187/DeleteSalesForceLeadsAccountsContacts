@@ -1,10 +1,11 @@
-// server.js
 const express = require('express');
 const path = require('path');
 const { chromium } = require('playwright');
 const { exec } = require('child_process');
+
 const app = express();
 const PORT = process.env.PORT || 2095;
+const HEADLESS = process.env.HEADLESS !== 'false'; // default to headless unless set to false
 
 let currentBrowser = null;
 let clients = [];
@@ -18,7 +19,8 @@ app.post('/delete', async (req, res) => {
 
   try {
     if (currentBrowser) await currentBrowser.close();
-    currentBrowser = await chromium.launch({ headless: false });
+
+    currentBrowser = await chromium.launch({ headless: HEADLESS });
     const context = await currentBrowser.newContext();
     const page = await context.newPage();
 
@@ -28,7 +30,6 @@ app.post('/delete', async (req, res) => {
     await page.getByRole('button', { name: 'Log In' }).click();
 
     await page.waitForSelector('text=Home', { timeout: 30000 });
-
     broadcast('✅ Logged in. Navigating to target object...');
 
     const deleteObject = async () => {
@@ -87,7 +88,7 @@ app.post('/delete', async (req, res) => {
     let round = 1;
     while (await deleteObject()) {
       const totalDeleted = round * 250;
-      broadcast(`🔁 Round ${round} complete — Deleted  ${totalDeleted} ${target}s`);
+      broadcast(`🔁 Round ${round} complete — Deleted ${totalDeleted} ${target}s`);
       round++;
     }
 
@@ -121,6 +122,7 @@ app.get('/logs', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
+
   clients.push(res);
   req.on('close', () => {
     clients = clients.filter(c => c !== res);
@@ -132,14 +134,14 @@ function broadcast(message) {
   clients.forEach(client => client.write(`data: ${message}\n\n`));
 }
 
-// Automatically open the localhost URL in the default browser
 app.listen(PORT, () => {
   const url = `http://localhost:${PORT}/`;
   console.log(`🟢 Server running at ${url}`);
 
-  const startCmd = process.platform === 'win32' ? 'start' :
-                   process.platform === 'darwin' ? 'open' :
-                   'xdg-open';
-
-  exec(`${startCmd} ${url}`);
+  if (process.env.NODE_ENV !== 'production') {
+    const startCmd = process.platform === 'win32' ? 'start' :
+                     process.platform === 'darwin' ? 'open' :
+                     'xdg-open';
+    exec(`${startCmd} ${url}`);
+  }
 });
