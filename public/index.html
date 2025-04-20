@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Salesforce Bulk Deletion Panel</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f9f9f9;
+      padding: 2rem;
+    }
+
+    .panel-container {
+      position: relative;
+      max-width: 500px;
+      margin: auto;
+      padding: 2rem;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+      background-color: #fff;
+    }
+
+    h2 {
+      color: #333;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .form-note {
+      font-size: 1rem;
+      font-weight: bold;
+      color: #444;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    select,
+    input[type="text"],
+    input[type="password"] {
+      margin-bottom: 1rem;
+      padding: 0.7rem;
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+
+    .show-password {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 0.7rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .delete-btn {
+      background: #28a745;
+      color: white;
+    }
+
+    .cancel-btn {
+      background: #dc3545;
+      color: white;
+    }
+
+    .corner-info-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #f2bdae;
+      color: rgb(32, 28, 28);
+      border: none;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    .corner-info-btn:hover {
+      background-color: #fefcfb;
+    }
+
+    #instructions {
+      display: none;
+      background: #f1faff;
+      border: 1px solid #dff1f9;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+      color: #333;
+      line-height: 1.5;
+    }
+
+    #instructions ul {
+      padding-left: 1.2rem;
+    }
+
+    #instructions li {
+      margin-bottom: 0.5rem;
+    }
+
+    pre {
+      background: #f4f4f4;
+      padding: 1rem;
+      white-space: pre-wrap;
+      height: 300px;
+      overflow-y: auto;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel-container">
+    <button class="corner-info-btn" onclick="toggleInstructions()">ℹ️</button>
+
+    <h2>Salesforce Bulk Deletion Panel</h2>
+    <p class="form-note">Select Object to Delete</p>
+
+    <div id="instructions">
+      <ul>
+        <li>⚠️ <strong>Salesforce UI updates:</strong> If Salesforce changes its layout, this tool may stop working.</li>
+        <li>🧭 <strong>When automation starts in Chromium:</strong> If you're in Lightning View, manually click on <strong>"Switch to Salesforce Classic"</strong> from the top-right profile menu to start deletion.</li>
+        <li>📦 <strong>Mass Delete Limit (Leads):</strong> The system selects up to <strong>250 leads</strong> in one go. Even if fewer leads are present, the message may still say "250 leads deleted."</li>
+        <li>👀 <strong>Contact/Account Issues:</strong> Sometimes, not all contacts or accounts are deleted, especially in the last batch. Please log in to Salesforce to confirm the deletions manually.</li>
+        <li>🌐 <strong>Keep Browser Open:</strong> Do not close the browser while deletion is in progress. It may interrupt the process.</li>
+        <li>📩 <strong>Need Help?</strong> Contact <strong>Team Lead - Nisha</strong> at <a href="mailto:nisha@leadangel.com">nisha@leadangel.com</a> for assistance.</li>
+      </ul>
+    </div>
+
+    <select id="target">
+      <option value="lead">Leads</option>
+      <option value="contact">Contacts</option>
+      <option value="account">Accounts</option>
+    </select>
+
+    <input type="text" id="username" placeholder="Username (e.g. user@domain.com)">
+    <input type="password" id="password" placeholder="Password">
+    <div class="show-password">
+      <input type="checkbox" id="togglePassword" onclick="togglePassword()"> 
+      <label for="togglePassword">Show Password</label>
+    </div>
+
+    <div class="button-group">
+      <button class="delete-btn" onclick="startDeletion()">Login & Delete</button>
+      <button class="cancel-btn" onclick="cancelOperation()">Cancel</button>
+    </div>
+
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    let eventSource;
+
+    function togglePassword() {
+      const passwordField = document.getElementById('password');
+      passwordField.type = passwordField.type === 'password' ? 'text' : 'password';
+    }
+
+    function toggleInstructions() {
+      const box = document.getElementById('instructions');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function cancelOperation() {
+      fetch('/cancel', { method: 'POST' });
+      document.getElementById('output').textContent += '❌ Operation cancelled by user.\n';
+    }
+
+    function startDeletion() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const target = document.getElementById('target').value;
+      const output = document.getElementById('output');
+
+      if (!username || !password) {
+        alert("Please enter both email and password.");
+        return;
+      }
+
+      output.textContent = '⏳ Logging into Salesforce for object deletion...\n';
+
+      fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, target })
+      });
+
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/logs');
+      eventSource.onmessage = function (event) {
+        output.textContent += event.data + '\n';
+        output.scrollTop = output.scrollHeight;
+      };
+      eventSource.onerror = function () {
+        output.textContent += '⚠️ Connection lost.\n';
+        eventSource.close();
+      };
+    }
+  </script>
+</body>
+</html>
